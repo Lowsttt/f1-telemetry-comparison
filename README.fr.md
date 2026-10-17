@@ -2,6 +2,8 @@
 
 [English](README.md) · **Français**
 
+[![Tests](https://github.com/Lowsttt/f1-telemetry-comparison/actions/workflows/tests.yml/badge.svg)](https://github.com/Lowsttt/f1-telemetry-comparison/actions/workflows/tests.yml)
+
 Compare le meilleur tour de deux pilotes de Formule 1 et explique **où et pourquoi** l'un est plus rapide que l'autre, virage par virage.
 
 À partir des données publiques de chronométrage, le script produit :
@@ -53,8 +55,8 @@ Norris signe la pole en **1:19.327**. Leclerc se qualifie 4e en **1:19.461**, à
 Il faut Python 3.11 ou plus récent.
 
 ```bash
-git clone <url-du-depot>
-cd <dossier-du-depot>
+git clone https://github.com/Lowsttt/f1-telemetry-comparison.git
+cd f1-telemetry-comparison
 pip install -r requirements.txt
 ```
 

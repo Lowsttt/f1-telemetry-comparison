@@ -2,6 +2,8 @@
 
 **English** · [Français](README.fr.md)
 
+[![Tests](https://github.com/Lowsttt/f1-telemetry-comparison/actions/workflows/tests.yml/badge.svg)](https://github.com/Lowsttt/f1-telemetry-comparison/actions/workflows/tests.yml)
+
 Compares the fastest laps of two Formula 1 drivers and explains **where and why** one is faster than the other, corner by corner.
 
 From public timing data, the script produces:
@@ -57,8 +59,8 @@ Norris took pole with a **1:19.327**. Leclerc qualified 4th with a **1:19.461**,
 Requires Python 3.11 or newer.
 
 ```bash
-git clone <repository-url>
-cd <repository-folder>
+git clone https://github.com/Lowsttt/f1-telemetry-comparison.git
+cd f1-telemetry-comparison
 pip install -r requirements.txt
 ```
 
