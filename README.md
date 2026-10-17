@@ -154,6 +154,10 @@ The GitHub Actions workflow ([`.github/workflows/tests.yml`](.github/workflows/t
 └── pyproject.toml              ruff and pytest configuration
 ```
 
+## License
+
+[MIT](LICENSE): free to use, modify and share, as long as the copyright notice is kept.
+
 ---
 
 Personal project by Rayan Bouyacoub, a cybersecurity student interested in software and data roles in Formula 1.
