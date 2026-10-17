@@ -12,6 +12,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -104,12 +105,18 @@ def _filtres_dates(debut, fin):
     return [f"date>={debut.strftime(fmt)}", f"date<={fin.strftime(fmt)}"]
 
 
+def _sans_accents(texte):
+    """« São Paulo » -> « sao paulo » : la recherche ne dépend ni des accents ni de la casse."""
+    decompose = unicodedata.normalize("NFKD", str(texte))
+    return "".join(c for c in decompose if not unicodedata.combining(c)).lower()
+
+
 def _trouver_session(annee, grand_prix, type_session):
-    cible = grand_prix.lower()
+    cible = _sans_accents(grand_prix)
     champs = ("meeting_name", "meeting_official_name", "location", "country_name", "circuit_short_name")
     candidats = [
         m for m in _openf1("meetings", year=annee)
-        if any(cible in str(m.get(c, "")).lower() for c in champs)
+        if any(cible in _sans_accents(m.get(c, "")) for c in champs)
     ]
     # Un nom de pays peut aussi désigner les essais hivernaux : on préfère le Grand Prix
     candidats.sort(key=lambda m: "grand prix" not in m["meeting_name"].lower())
