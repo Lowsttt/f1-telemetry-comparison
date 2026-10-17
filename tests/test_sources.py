@@ -166,6 +166,26 @@ def test_get_json_404_vide_et_pas_en_cache(cache_vide, monkeypatch):
     assert list(cache_vide.iterdir()) == []
 
 
+def test_requetes_espacees(monkeypatch):
+    attentes = []
+    monkeypatch.setattr(sources.time, "sleep", attentes.append)
+    monkeypatch.setattr(sources.time, "monotonic", lambda: 100.0)
+    monkeypatch.setattr(sources, "_derniere_requete", 99.5)  # requête précédente il y a 0,5 s
+    sources._patienter_avant_requete()
+    assert attentes == [pytest.approx(sources.INTERVALLE_REQUETES_S - 0.5)]
+    monkeypatch.setattr(sources, "_derniere_requete", 0.0)  # il y a longtemps : pas d'attente
+    attentes.clear()
+    sources._patienter_avant_requete()
+    assert attentes == []
+
+
+def test_delai_apres_429_respecte_retry_after():
+    avec_entete = urllib.error.HTTPError("https://x", 429, "trop", {"Retry-After": "12"}, None)
+    assert sources._delai_apres_429(avec_entete, essai=0) == 12.0
+    assert sources._delai_apres_429(erreur_http(429), essai=1) == 10.0  # sans en-tête : 5 × 2^essai
+    assert sources._delai_apres_429(erreur_http(429), essai=10) == 60.0  # plafonné
+
+
 def test_get_json_autre_erreur_remonte(cache_vide, monkeypatch):
     def faux_urlopen(requete, timeout):
         raise erreur_http(500)

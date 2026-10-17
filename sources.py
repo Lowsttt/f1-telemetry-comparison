@@ -60,6 +60,26 @@ NOMS_SESSIONS_OPENF1 = {
 }
 # ex : "CAR 44 (HAM) LAP DELETED - TRACK LIMITS AT TURN 2 LAP 4 16:10:08"
 REGEX_TOUR_SUPPRIME = re.compile(r"CAR (\d+) .*DELETED.*\bLAP (\d+)")
+INTERVALLE_REQUETES_S = 2.1  # < 30 requêtes par minute (limite d'OpenF1 sans abonnement)
+NB_ESSAIS = 8
+_derniere_requete = float("-inf")
+
+
+def _patienter_avant_requete():
+    """Espace les requêtes réseau : OpenF1 gratuit limite à environ 30 requêtes par minute."""
+    global _derniere_requete
+    attente = _derniere_requete + INTERVALLE_REQUETES_S - time.monotonic()
+    if attente > 0:
+        time.sleep(attente)
+    _derniere_requete = time.monotonic()
+
+
+def _delai_apres_429(erreur, essai):
+    """Délai demandé par le serveur (en-tête Retry-After), sinon attente croissante."""
+    try:
+        return min(float(erreur.headers["Retry-After"]), 120.0)
+    except (TypeError, KeyError, ValueError):
+        return min(5.0 * 2 ** essai, 60.0)
 
 
 def _get_json(url):
@@ -71,7 +91,8 @@ def _get_json(url):
             return json.load(f)
 
     requete = urllib.request.Request(url, headers={"User-Agent": "comparaison-telemetrie"})
-    for essai in range(6):
+    for essai in range(NB_ESSAIS):
+        _patienter_avant_requete()
         try:
             with urllib.request.urlopen(requete, timeout=60) as reponse:
                 donnees = json.load(reponse)
@@ -79,8 +100,8 @@ def _get_json(url):
         except urllib.error.HTTPError as e:
             if e.code == 404:  # OpenF1 répond 404 quand la requête ne trouve rien
                 return []
-            if e.code == 429 and essai < 5:  # trop de requêtes : on attend de plus en plus
-                time.sleep(2 ** essai)
+            if e.code == 429 and essai < NB_ESSAIS - 1:  # trop de requêtes : on patiente
+                time.sleep(_delai_apres_429(e, essai))
                 continue
             raise
 
