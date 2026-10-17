@@ -1,3 +1,9 @@
 __pycache__/
 cache_f1/
 .venv/
+cache_openf1/
+
+# Fichiers produits par le script (les images du README sont dans docs/)
+telemetrie_*.png
+carte_*.png
+analyse_*.csv
