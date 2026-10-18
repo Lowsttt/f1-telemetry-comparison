@@ -1,23 +1,28 @@
-# Comparaison de télémétrie F1
+# Télémétrie et stratégie F1
 
 [English](README.md) · **Français**
 
 [![Tests](https://github.com/Lowsttt/f1-telemetry-comparison/actions/workflows/tests.yml/badge.svg)](https://github.com/Lowsttt/f1-telemetry-comparison/actions/workflows/tests.yml)
 
-Compare le meilleur tour de deux pilotes de Formule 1 et explique **où et pourquoi** l'un est plus rapide que l'autre, virage par virage.
+Deux outils construits sur les données publiques de chronométrage de la Formule 1 :
 
-À partir des données publiques de chronométrage, le script produit :
+1. **[Comparaison de télémétrie](#partie-1--comparaison-de-télémétrie)** : où et pourquoi un pilote est plus rapide qu'un autre, virage par virage.
+2. **[Stratégie des arrêts aux stands](#partie-2--stratégie-des-arrêts-aux-stands)** : modèle d'usure des pneus, calculateur d'undercut et fenêtre d'arrêt, **vérifiés sur 167 undercuts réels de 2023 à 2025** : 73 % de bonnes prédictions, mieux que toutes les règles simples testées.
+
+![Carte de Monza 2024 : pilote le plus rapide par zone](docs/images/monza_2024_q_lec_nor_carte.png)
+
+---
+
+## Partie 1 — Comparaison de télémétrie
+
+Compare le meilleur tour de deux pilotes et produit :
 
 - un **graphique de télémétrie** : vitesse, écart cumulé, accélérateur, frein et rapport, en fonction de la distance ;
 - une **carte du circuit** colorée selon le pilote le plus rapide dans chaque zone ;
 - un **tableau par zone** (temps gagné, vitesses mini et maxi, point de freinage), exporté en CSV ;
 - une **conclusion rédigée automatiquement**.
 
-![Carte de Monza 2024 : pilote le plus rapide par zone](docs/images/monza_2024_q_lec_nor_carte.png)
-
----
-
-## Exemple : Monza 2024, qualifications, Leclerc contre Norris
+### Exemple : Monza 2024, qualifications, Leclerc contre Norris
 
 Norris signe la pole en **1:19.327**. Leclerc se qualifie 4e en **1:19.461**, à **0,134 s**. Les deux tours sont faits en pneus tendres.
 
@@ -36,17 +41,97 @@ Norris signe la pole en **1:19.327**. Leclerc se qualifie 4e en **1:19.461**, à
 
 *Vmin : vitesse au point le plus lent de la zone. Vmax : vitesse en fin de ligne droite après le virage. Freinage : distance depuis la ligne de départ.*
 
-### Ce qu'on en tire
-
 - **Leclerc va plus vite en ligne droite.** Il est 4 à 5 km/h plus rapide en fin de ligne droite dans 6 zones sur 8 (351 contre 347 km/h avant le Rettifilo). Il gagne ainsi **0,110 s**, uniquement dans les deux zones les plus rapides du circuit : la ligne droite de départ et la Curva Grande.
 - **Norris va plus vite en courbe.** Il passe 3 à 6 km/h plus vite au point le plus lent des virages moyens et rapides (Lesmo, Ascari, Parabolica). Il freine aussi plus de 10 m plus tard dans 4 des 6 freinages : 24 m au Rettifilo, 10 m à Lesmo 2, 29 m à Ascari, 18 m à la Parabolica. Il gagne ainsi **0,243 s** sur six zones.
-- **Bilan** : ce que Norris gagne en courbe vaut plus que ce que Leclerc gagne en ligne droite, d'où 0,134 s à l'arrivée (0,243 − 0,110, aux arrondis près). Ce profil correspond à une Ferrari réglée avec moins d'appui (plus rapide en ligne droite, moins en courbe) face à une McLaren plus à l'aise dans les virages. C'est une hypothèse : un seul tour par pilote ne permet pas de séparer l'effet de la voiture de celui du pilote.
+- **Bilan** : ce que Norris gagne en courbe vaut plus que ce que Leclerc gagne en ligne droite, d'où 0,134 s à l'arrivée (0,243 − 0,110, aux arrondis près). Ce profil correspond à une Ferrari réglée avec moins d'appui face à une McLaren plus à l'aise dans les virages. C'est une hypothèse : un seul tour par pilote ne permet pas de séparer l'effet de la voiture de celui du pilote.
 
 > La conclusion produite par le script : « NOR devance LEC de 0.134 s. NOR est plus rapide dans 6 zone(s) sur 8, surtout T6 (+0.068 s) : il passe 3 km/h plus vite au point le plus lent. LEC est plus rapide dans 2 zone(s) sur 8, surtout Départ → T1-T2 (+0.061 s) : il atteint 4 km/h de plus en fin de ligne droite. »
 
-### Autre exemple : Monaco 2024, Leclerc contre Piastri
+**Autre exemple : Monaco 2024, Leclerc contre Piastri**
 
 ![Carte de Monaco 2024 : pilote le plus rapide par zone](docs/images/monaco_2024_q_lec_pia_carte.png)
+
+### Comment ça marche
+
+- **Meilleur tour** : le tour le plus rapide de chaque pilote, sans les sorties des stands ni les tours supprimés par la direction de course (limites de piste), retrouvés dans ses messages.
+- **Distance** : obtenue en intégrant la vitesse. Le tour du pilote 2 est ramené à la longueur de celui du pilote 1 pour comparer les points de freinage au même endroit.
+- **Recalage** : OpenF1 ne donne qu'une heure de début de tour approximative, ce qui peut décaler les deux tours de 10 à 20 m. Au freinage, ce décalage crée de faux écarts de plusieurs dixièmes. Le script le corrige en cherchant le décalage qui superpose le mieux les deux courbes de vitesse.
+- **Écart cumulé** : les chronos des deux pilotes sont comparés à distance égale, sur une grille commune. Chaque tour est fixé à 0 s au départ et à son temps officiel à l'arrivée, donc la courbe finit exactement sur l'écart officiel.
+- **Zones** : une par virage, ou par groupe de virages à moins de 110 m (chicanes). Une zone va de la vitesse maximale avant le virage jusqu'à celle avant le virage suivant. Les gains de toutes les zones s'additionnent donc exactement à l'écart total.
+- **Point de freinage** : premier passage « pas de frein → frein » dans les 400 m avant le virage, avec au moins 0,5 s sans frein juste avant. Le signal de frein « clignote » parfois pendant un freinage, et ce critère évite de compter ces coupures.
+- **Carte** : la trajectoire réelle du pilote 1, orientée comme le plan officiel du circuit, colorée zone par zone.
+
+**Limites** : la télémétrie publique n'a qu'environ 4 points par seconde, donc un point de freinage n'est connu qu'à une dizaine de mètres près (la conclusion ignore les écarts de moins de 10 m ou de 2 km/h). Un seul tour par pilote : le trafic, le vent ou un tour imparfait pèsent sur le résultat.
+
+---
+
+## Partie 2 — Stratégie des arrêts aux stands
+
+Quatre modules, un point d'entrée (`strategie.py`) :
+
+| Module | Rôle |
+|---|---|
+| `course.py` | Tableau tour par tour nettoyé d'une course : temps, composé, âge du pneu, arrêts, écart avec la voiture devant, état de la piste (voiture de sécurité, voiture de sécurité virtuelle, drapeau rouge, double drapeau jaune), pluie. Une colonne `exclusion` indique pourquoi un tour ne doit pas servir à mesurer l'usure. |
+| `usure.py` | **Modèle d'usure des pneus**, avec marges d'erreur. |
+| `undercut.py` | Coût réel d'un arrêt, **calculateur d'undercut et d'overcut**, **fenêtre d'arrêt**, « faut-il rentrer sous voiture de sécurité ? » |
+| `validation.py` | **Vérification sur l'historique** : le calculateur prédit-il les vrais undercuts ? |
+
+### Étude de cas : Monza 2024, la victoire de Leclerc avec un seul arrêt
+
+Leclerc a gagné avec un seul arrêt (médium, puis 38 tours en durs). Les deux McLaren se sont arrêtées deux fois : Piastri termine à 2,6 s, Norris 3e.
+
+**1. Usure des pneus.** Temps au tour = rythme du pilote + effet carburant × tour + écart du composé à neuf + (usure du composé + écart de l'écurie) × âge du pneu.
+
+![Usure des pneus à Monza 2024](docs/images/monza_2024_usure.png)
+
+- Effet carburant (la voiture s'allège) : **−0,061 s par tour** [−0,064 ; −0,059].
+- Usure : **+0,047 s par tour en dur** [+0,042 ; +0,054], **+0,037 s par tour en médium** [+0,018 ; +0,059].
+- Par écurie, sur le dur : Mercedes +0,023, McLaren +0,040, Ferrari +0,055 s par tour. Ferrari usait ses durs plus vite que McLaren, et pourtant un seul arrêt restait le meilleur choix : un arrêt coûte 26 s, plus que l'usure qu'il évite.
+
+**2. Les undercuts des tours 13 à 15.**
+
+| Tentative (tour de décision) | Écart | Chance prédite | Écart final prédit | Ce qui s'est passé |
+|---|---|---|---|---|
+| NOR sur LEC (tour 13), LEC réagit 1 tour plus tard | 0,80 s | 49 % | +0,0 s [−3,3 ; +3,3] | **Réussi** : NOR devant de 2,3 s |
+| LEC sur PIA (tour 14), PIA réagit 1 tour plus tard | 3,56 s | 8 % | +2,8 s [−0,5 ; +6,1] | **Raté** : PIA devant de 3,4 s |
+
+L'échec est clairement prévu. La réussite est un pile ou face pour le modèle, qui a sous-estimé le gain (0,8 s prévu, 3 s en réalité).
+
+**3. Fenêtre d'arrêt.**
+
+![Fenêtre d'arrêt de Leclerc à Monza 2024](docs/images/monza_2024_fenetre_LEC.png)
+
+- **Un seul arrêt bat deux arrêts dans 100 % des tirages du modèle.**
+- Le double arrêt des McLaren leur coûte **environ 13,5 s** par rapport à leur optimum (13,3 s pour Norris, 13,8 s pour Piastri). Le seul arrêt de Leclerc lui coûte 5,1 s : **8 à 9 s d'avance stratégique**, pour une victoire avec 2,6 s d'avance.
+- L'optimum tombe au tour 21 parce qu'aucun médium n'a tenu plus de 21 tours dans cette course : l'outil ne prolonge jamais la durée de vie d'un pneu au-delà de ce qui a été observé. Leclerc s'est arrêté plus tôt (tour 15) pour répondre à l'undercut de Norris, ce que la fenêtre d'arrêt, qui modélise une course sans adversaire, ne voit pas.
+
+### Vérification sur 167 undercuts réels (2023-2025)
+
+`validation.py` retrouve chaque vraie tentative d'undercut (A à moins de 3 s derrière B, A s'arrête, B réagit 1 à 5 tours plus tard, sous drapeau vert), puis prédit chacune **avec uniquement les tours connus au moment de décider**. Un composé pas encore roulé dans la course reçoit un a priori appris sur les **courses précédentes uniquement**. Un test vérifie que modifier tous les tours après la décision laisse la prédiction strictement identique.
+
+| Méthode | Bonnes prédictions | Score de Brier (0 = parfait, 0,25 = pile ou face) |
+|---|---|---|
+| **Modèle** | **73 %** | **0,206** |
+| « Écart < 1,2 s » (meilleur seuil, **choisi en connaissant les résultats**) | 67 % | 0,329 |
+| « Écart < 2 s » | 63 % | 0,371 |
+| « L'undercut marche toujours » | 48 % | 0,521 |
+
+![Calibration sur 167 undercuts réels](docs/images/validation_undercuts_2023_2025.png)
+
+- Par saison : 79 % de bonnes prédictions en 2023 (Brier 0,18), 73 % en 2024 (0,19), **65 % en 2025 (0,26)**.
+- Erreur médiane sur l'écart final : **2,1 s** (moyenne 4,4 s, gonflée par quelques incidents comme une pénalité purgée pendant l'arrêt).
+- **Le modèle est trop sûr de lui aux extrêmes** : quand il annonce 7 %, l'undercut réussit 26 % du temps ; quand il annonce 92 %, 80 %. Un terme d'« aléa non modélisé » appris sur les saisons passées n'aide presque pas (Brier sur 2025 : 0,261 → 0,258) et n'a donc pas été ajouté : la faiblesse de 2025 vient de la prédiction centrale, pas de la largeur des probabilités. C'est la principale piste d'amélioration.
+
+### Méthode et garde-fous
+
+- **Régression robuste** (Huber) : les tours encore un peu perturbés pèsent moins.
+- **Marges d'erreur** par un bootstrap « sauvage » par relais : les écarts au modèle sont recombinés relais par relais avec un signe tiré au hasard, si bien que chaque pilote et chaque composé restent présents dans chaque tirage.
+- **Écart par écurie** et **effet carburant** rappelés doucement vers une valeur typique (ridge). Avant les premiers arrêts, l'âge du pneu avance exactement comme le numéro du tour : les données seules ne permettent pas de séparer carburant et usure.
+- **Coût d'un arrêt mesuré** sur les arrêts sous drapeau vert de la course (Monza : 26,0 s, MultiViewer : 25,4 s).
+- **Contre le piège de l'optimiseur** : la fenêtre d'arrêt ne propose que les composés roulés sur au moins 5 relais propres, et aucun relais plus long que le plus long observé dans la course. Sans ça, elle recommandait 30 tours en tendres à Singapour 2023, sur la foi de 3 relais.
+- **Qualité des données** : les tours sous voiture de sécurité, les relances, les doubles drapeaux jaunes, la pluie, les tours d'arrêt et les tours anormalement lents sont exclus. Bahreïn 2023 n'a aucun arrêt dans OpenF1 : les tours d'entrée aux stands sont déduits des tours de sortie.
+
+**Limites** : le calculateur modélise une course sans adversaire : pas de trafic à la sortie des stands, pas de difficulté de dépassement, pas de valeur de la position en piste. Usure linéaire, donc pas de chute brutale en fin de vie du pneu. Données OpenF1 à partir de 2023.
 
 ---
 
@@ -62,18 +147,11 @@ pip install -r requirements.txt
 
 ## Utilisation
 
+**Comparaison de télémétrie**
+
 ```bash
-# Valeurs par défaut : Monza 2024, qualifications, LEC contre NOR
-python comparaison_telemetrie.py
-
-# Année, Grand Prix, session, pilote 1, pilote 2
-python comparaison_telemetrie.py 2024 Monaco Q LEC PIA
-python comparaison_telemetrie.py 2024 "Abu Dhabi" R LEC SAI
-
-# Enregistrer les images sans ouvrir de fenêtre
-python comparaison_telemetrie.py 2024 Monza Q LEC NOR --no-show
-
-# Toutes les options
+python comparaison_telemetrie.py                            # Monza 2024, qualifications, LEC contre NOR
+python comparaison_telemetrie.py 2024 Monaco Q LEC PIA      # année, Grand Prix, session, pilote 1, pilote 2
 python comparaison_telemetrie.py --help
 ```
 
@@ -86,41 +164,26 @@ python comparaison_telemetrie.py --help
 | `--source` | `openf1` ou `fastf1` | `openf1` |
 | `--no-show` | enregistre les images sans les afficher | désactivé |
 
-Le script affiche le tableau et la conclusion dans le terminal et crée trois fichiers : `telemetrie_<…>.png`, `carte_<…>.png` et `analyse_<…>.csv`. Les données téléchargées sont gardées en cache (`cache_openf1/`), donc un deuxième lancement est instantané.
+**Stratégie des arrêts aux stands**
 
----
-
-## Comment ça marche
-
-```
-sources.py           Chargement des données (OpenF1 ou FastF1), même format en sortie
-   │
-analyse.py           Écart cumulé, découpage en zones, bilan et conclusion
-   │
-comparaison_telemetrie.py   Ligne de commande, graphiques et carte
+```bash
+python strategie.py course     2024 Monza               # tableau tour par tour nettoyé
+python strategie.py usure      2024 Monza               # usure des pneus par composé et par écurie
+python strategie.py duel       2024 Monza 13 NOR LEC    # undercut de NOR sur LEC, décision au tour 13
+python strategie.py fenetre    2024 Monza LEC           # meilleure stratégie d'arrêts de LEC
+python strategie.py fenetre    2023 Singapore SAI --depuis 19 --sc 20   # rentrer sous voiture de sécurité ?
+python strategie.py validation 2023 2025                # vérification sur les undercuts réels (~15 min la 1re fois)
 ```
 
-- **Meilleur tour** : le tour le plus rapide de chaque pilote, sans les sorties des stands ni les tours supprimés par la direction de course (limites de piste), retrouvés dans ses messages.
-- **Distance** : obtenue en intégrant la vitesse. Le tour du pilote 2 est ramené à la longueur de celui du pilote 1 pour comparer les points de freinage au même endroit.
-- **Recalage** : OpenF1 ne donne qu'une heure de début de tour approximative, ce qui peut décaler les deux tours de 10 à 20 m. Au freinage, ce décalage crée de faux écarts de plusieurs dixièmes. Le script le corrige en cherchant le décalage qui superpose le mieux les deux courbes de vitesse.
-- **Écart cumulé** : les chronos des deux pilotes sont comparés à distance égale, sur une grille commune. Chaque tour est fixé à 0 s au départ et à son temps officiel à l'arrivée, donc la courbe finit exactement sur l'écart officiel.
-- **Zones** : une par virage, ou par groupe de virages à moins de 110 m (chicanes). Une zone va de la vitesse maximale avant le virage jusqu'à celle avant le virage suivant : freinage, virage, sortie et ligne droite. Les gains de toutes les zones s'additionnent donc exactement à l'écart total.
-- **Point de freinage** : premier passage « pas de frein → frein » dans les 400 m avant le virage, avec au moins 0,5 s sans frein juste avant. Le signal de frein « clignote » parfois pendant un freinage, et ce critère évite de compter ces coupures.
-- **Carte** : la trajectoire réelle du pilote 1, orientée comme le plan officiel du circuit, colorée zone par zone.
-
-### Limites
-
-- La télémétrie publique n'a qu'**environ 4 points par seconde**. Un point de freinage n'est donc connu qu'à une dizaine de mètres près, et la conclusion ignore les écarts de moins de 10 m ou de 2 km/h.
-- **Un seul tour par pilote** : le trafic, le vent ou un tour imparfait pèsent sur le résultat.
-- OpenF1 ne couvre que les saisons **2023 et après**.
+Chaque commande accepte `--help`. Les données téléchargées sont gardées en cache (`cache_openf1/`). Les requêtes sont espacées pour respecter la limite gratuite d'OpenF1 : le premier téléchargement d'une saison entière prend quelques minutes.
 
 ---
 
 ## Données
 
-- **[OpenF1](https://openf1.org)** (source par défaut) : API publique et gratuite, à partir de 2023. Elle fournit les tours, la télémétrie, les positions, les pneus et les messages de la direction de course.
-- **[MultiViewer](https://multiviewer.app)** : position des virages et orientation des circuits.
-- **[FastF1](https://github.com/theOehrly/Fast-F1)** (`--source fastf1`) : elle remonte avant 2023, mais depuis le 15 octobre 2026 l'archive F1 qu'elle utilise exige une authentification ([Fast-F1#978](https://github.com/theOehrly/Fast-F1/issues/978)). OpenF1 est donc la source par défaut en attendant un correctif.
+- **[OpenF1](https://openf1.org)** (source par défaut) : API publique et gratuite, à partir de 2023 : tours, télémétrie, positions, pneus, arrêts, écarts, messages de la direction de course, météo.
+- **[MultiViewer](https://multiviewer.app)** : position des virages, orientation des circuits, temps perdu de référence pour un arrêt.
+- **[FastF1](https://github.com/theOehrly/Fast-F1)** (`--source fastf1`, comparaison de télémétrie seulement) : elle remonte avant 2023, mais depuis le 15 octobre 2026 l'archive F1 qu'elle utilise exige une authentification ([Fast-F1#978](https://github.com/theOehrly/Fast-F1/issues/978)).
 
 ## Tests et qualité
 
@@ -130,19 +193,19 @@ ruff check .
 pytest
 ```
 
-Les 27 tests tournent **sans réseau**, en moins d'une seconde :
-
-- l'analyse est vérifiée sur des tours synthétiques dont le résultat est connu d'avance ;
-- la source OpenF1 est testée avec des réponses d'API simulées : tours supprimés, cache, nouvelles tentatives après une erreur 429 (trop de requêtes), recalage.
-
-Le workflow GitHub Actions ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)) lance ruff et les tests à chaque push, sur Python 3.11, 3.12 et 3.13.
+Les 91 tests tournent **sans réseau**, en une seconde environ. Des courses synthétiques aux paramètres connus vérifient que les modèles les retrouvent (usure, effet carburant, coût d'un arrêt, tour d'arrêt optimal). Des réponses d'API simulées testent le chargement des données (tours supprimés, cache, limite de débit, arrêts manquants). Un test dédié vérifie que la validation n'utilise jamais de données du futur. GitHub Actions lance ruff et les tests à chaque push, sur Python 3.11, 3.12 et 3.13.
 
 ## Structure
 
 ```
-├── comparaison_telemetrie.py   Point d'entrée : arguments, graphiques, carte
+├── comparaison_telemetrie.py   Comparaison de télémétrie : arguments, graphiques, carte
 ├── analyse.py                  Écart cumulé, zones, bilan, conclusion
-├── sources.py                  Chargement OpenF1 / FastF1
+├── sources.py                  Chargement OpenF1 / FastF1, cache, limite de débit
+├── strategie.py                Point d'entrée de l'outil de stratégie
+├── course.py                   Tableau tour par tour nettoyé d'une course
+├── usure.py                    Modèle d'usure des pneus
+├── undercut.py                 Coût d'un arrêt, calculateur d'undercut, fenêtre d'arrêt
+├── validation.py               Vérification sur les undercuts réels 2023-2025
 ├── tests/                      Tests pytest (sans réseau)
 ├── docs/images/                Images du README
 ├── requirements.txt            Dépendances

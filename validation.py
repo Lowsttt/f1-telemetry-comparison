@@ -281,14 +281,14 @@ def valider(annees, max_courses=None, journal=print):
     return pd.concat(tous, ignore_index=True) if tous else pd.DataFrame()
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Vérification du calculateur d'undercut sur l'historique.")
     parser.add_argument("debut", type=int, help="première saison, ex : 2023")
     parser.add_argument("fin", type=int, help="dernière saison, ex : 2025")
     parser.add_argument("--max-courses", type=int, help="limite le nombre de courses (essai rapide)")
     parser.add_argument("--csv", help="refait le rapport à partir de résultats déjà enregistrés")
     parser.add_argument("--no-show", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.csv:
         resultats = pd.read_csv(args.csv)

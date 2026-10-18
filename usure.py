@@ -342,7 +342,7 @@ def _intervalle(bas, haut, fmt="+.3f"):
     return f"[{bas:{fmt}} ; {haut:{fmt}}]"
 
 
-def main():
+def main(argv=None):
     from course import charger_course  # import local : usure.py reste testable sans réseau
 
     parser = argparse.ArgumentParser(description="Modèle d'usure des pneus pour une course.")
@@ -350,7 +350,7 @@ def main():
     parser.add_argument("grand_prix")
     parser.add_argument("--forme", choices=FORMES, default="lineaire")
     parser.add_argument("--no-show", action="store_true", help="enregistre le graphique sans l'afficher")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     course = charger_course(args.annee, args.grand_prix)
     modele = ajuster_usure(course.tours, forme=args.forme)

@@ -259,8 +259,9 @@ def evaluer_strategies(course, modele, cout, pilote, depuis=0, max_arrets=2, sc=
     pilote_tours = course.tours[course.tours["pilote"] == pilote].sort_values("tour")
     nb_tours = int(course.tours["tour"].max())
     if depuis == 0:
+        # État « à la fin du tour 0 » : le pneu aura l'âge du 1er tour au tour suivant
         premier = pilote_tours.iloc[0]
-        etat = {"equipe": premier["equipe"], "compose": premier["compose"], "age": premier["age_pneu"]}
+        etat = {"equipe": premier["equipe"], "compose": premier["compose"], "age": premier["age_pneu"] - 1}
         utilises = set()
     else:
         etat = etat_pilote(course, pilote, depuis)
@@ -365,25 +366,29 @@ def afficher_duel(resultats, poursuivant, devant, tour):
           f"inférieur à {max(r1.gain, 0):.1f} s environ.")
 
 
-def main():
+def main(argv=None):
     from course import charger_course  # import local : undercut.py reste testable sans réseau
 
     parser = argparse.ArgumentParser(description="Aide à la stratégie des arrêts aux stands.")
     parser.add_argument("annee", type=int)
     parser.add_argument("grand_prix")
     sous = parser.add_subparsers(dest="commande", required=True)
-    duel = sous.add_parser("duel", help="undercut d'un pilote sur celui de devant")
+    duel = sous.add_parser(
+        "duel", help="undercut d'un pilote sur celui de devant",
+        usage="strategie.py duel annee grand_prix [-h] [--pneu PNEU] tour poursuivant devant")
     duel.add_argument("tour", type=int, help="tour de décision")
     duel.add_argument("poursuivant")
     duel.add_argument("devant")
     duel.add_argument("--pneu", help="composé chaussé par les deux pilotes (défaut : le plus dur)")
-    fenetre = sous.add_parser("fenetre", help="meilleure stratégie d'arrêts pour un pilote")
+    fenetre = sous.add_parser(
+        "fenetre", help="meilleure stratégie d'arrêts pour un pilote",
+        usage="strategie.py fenetre annee grand_prix [-h] [--depuis N] [--sc N] [--vsc] [--no-show] pilote")
     fenetre.add_argument("pilote")
     fenetre.add_argument("--depuis", type=int, default=0, help="tour à partir duquel on décide")
     fenetre.add_argument("--sc", type=int, help="tour d'une voiture de sécurité (arrêt moins coûteux)")
     fenetre.add_argument("--vsc", action="store_true", help="avec --sc : voiture de sécurité virtuelle")
     fenetre.add_argument("--no-show", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     course = charger_course(args.annee, args.grand_prix)
     modele = ajuster_usure(course.tours)

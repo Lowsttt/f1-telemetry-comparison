@@ -319,12 +319,12 @@ def strategies(tours):
             for p in ordre.index}
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Tableau tour par tour d'une course, nettoyé.")
     parser.add_argument("annee", type=int)
     parser.add_argument("grand_prix")
     parser.add_argument("--csv", action="store_true", help="exporte le tableau tour par tour")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     course = charger_course(args.annee, args.grand_prix)
     tours = course.tours
