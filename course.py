@@ -267,6 +267,21 @@ def charger_course(annee, grand_prix):
     apres_neutralisation, double_jaune, pluie, exclusion, propre.
     """
     meeting, session = _trouver_session(annee, grand_prix, "R")
+    return charger_session(meeting, session, annee)
+
+
+def courses_de_la_saison(annee):
+    """Courses (hors sprints) disputées d'une saison, dans l'ordre : [(meeting, session)]."""
+    meetings = {m["meeting_key"]: m for m in _openf1("meetings", year=annee)}
+    maintenant = pd.Timestamp.now(tz="UTC")
+    sessions = [s for s in _openf1("sessions", year=annee, session_name="Race")
+                if not s.get("is_cancelled") and _dates([s["date_start"]]).iloc[0] < maintenant
+                and s["meeting_key"] in meetings]
+    return [(meetings[s["meeting_key"]], s) for s in sorted(sessions, key=lambda s: s["date_start"])]
+
+
+def charger_session(meeting, session, annee):
+    """Course complète à partir d'un meeting et d'une session OpenF1 déjà trouvés."""
     k = session["session_key"]
     print(f"OpenF1 : {meeting['meeting_name']} {annee} - {session['session_name']}")
 

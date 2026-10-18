@@ -99,8 +99,19 @@ def test_compose_trop_peu_roule_ecarte():
     tours = course_synthetique()
     extra = tours[tours["pilote"] == "P00"].head(5).assign(compose="SOFT")
     m = usure.ajuster_usure(pd.concat([tours, extra], ignore_index=True), nb_bootstrap=0)
-    assert m.ecartes == {"SOFT": 5}
+    assert m.ecartes == {"SOFT": "seulement 5 tours propres"}
     assert "SOFT" not in m.composes
+
+
+def test_compose_non_relie_ecarte():
+    # Avant les arrêts, chaque pilote n'a roulé qu'un composé : l'écart médium / dur neuf ne
+    # peut pas être séparé du rythme des pilotes. On garde le composé le plus roulé.
+    tours = course_synthetique()
+    avant_arrets = tours[tours["tour"] <= 15]
+    m = usure.ajuster_usure(avant_arrets, nb_bootstrap=0)
+    assert m.composes == ["HARD"] or m.composes == ["MEDIUM"]
+    ecarte = ({"MEDIUM", "HARD"} - set(m.composes)).pop()
+    assert m.ecartes == {ecarte: "aucun pilote ne l'a roulé avec un autre composé"}
 
 
 def test_tours_non_propres_et_pluie_ignores():

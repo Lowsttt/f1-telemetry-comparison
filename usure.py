@@ -41,6 +41,12 @@ FORMES = ("lineaire", "quadratique")
 # Force du rappel des écarts d'usure par écurie vers 0. Réglée sur 8 courses 2023-2025
 # (contrôle de prédiction des fins de relais), vérifiée sur 8 autres jamais vues.
 RAPPEL_ECURIE = 2000.0
+# Effet carburant rappelé faiblement vers une valeur typique (s/tour). Avant les arrêts,
+# l'âge du pneu avance exactement comme le numéro du tour : carburant et usure se confondent
+# et le calcul pouvait donner +14 s/tour d'un côté et -14 s/tour de l'autre. Avec des
+# arrêts (âges remis à zéro), les données l'emportent largement sur ce rappel.
+CARBURANT_TYPIQUE = -0.06
+RAPPEL_CARBURANT = 2000.0
 
 
 @dataclass
@@ -53,7 +59,7 @@ class ModeleUsure:
     coefficients: np.ndarray
     tirages: np.ndarray  # coefficients de chaque rééchantillonnage (nb tirages x nb coefficients)
     donnees: pd.DataFrame  # tours utilisés pour l'ajustement
-    ecartes: dict = field(default_factory=dict)  # composé -> nombre de tours, si trop peu roulé
+    ecartes: dict = field(default_factory=dict)  # composé écarté -> raison
 
     def coefficient(self, nom, tirages=False):
         """Valeur d'un coefficient ; 0 s'il n'existe pas (écurie sans ce composé, par exemple)."""
@@ -131,23 +137,26 @@ def matrice(tours, colonnes):
     return x
 
 
-def regression_robuste(x, y, penalites=None, iterations=50, k=1.345):
+def regression_robuste(x, y, penalites=None, cibles=None, iterations=50, k=1.345):
     """
     Moindres carrés pondérés itératifs avec la fonction de Huber.
 
     Les résidus au-delà de k écarts-types robustes reçoivent un poids réduit (k / |résidu|).
-    `penalites` : force du rappel vers 0 de chaque coefficient (ridge), 0 = aucun rappel.
+    `penalites` : force du rappel de chaque coefficient vers sa cible (ridge), 0 = aucun rappel.
+    `cibles` : valeur vers laquelle chaque coefficient est rappelé (0 par défaut).
     """
     lignes_rappel = np.zeros((0, x.shape[1]))
+    valeurs_rappel = np.zeros(0)
     if penalites is not None and np.any(penalites > 0):
         rappel = np.flatnonzero(penalites > 0)
+        racines = np.sqrt(penalites[rappel])
         lignes_rappel = np.zeros((len(rappel), x.shape[1]))
-        lignes_rappel[np.arange(len(rappel)), rappel] = np.sqrt(penalites[rappel])
-    zeros = np.zeros(len(lignes_rappel))
+        lignes_rappel[np.arange(len(rappel)), rappel] = racines
+        valeurs_rappel = racines * (np.zeros(x.shape[1]) if cibles is None else cibles)[rappel]
 
     def resoudre(racine_poids):
         a = np.vstack([x * racine_poids[:, None], lignes_rappel])
-        return np.linalg.lstsq(a, np.concatenate([y * racine_poids, zeros]), rcond=None)[0]
+        return np.linalg.lstsq(a, np.concatenate([y * racine_poids, valeurs_rappel]), rcond=None)[0]
 
     beta = resoudre(np.ones(len(y)))
     for _ in range(iterations):
@@ -156,7 +165,7 @@ def regression_robuste(x, y, penalites=None, iterations=50, k=1.345):
         if echelle < 1e-9:
             break
         u = np.abs(residus) / (k * echelle)
-        nouveau = resoudre(np.sqrt(np.where(u <= 1, 1.0, 1.0 / u)))
+        nouveau = resoudre(np.sqrt(np.minimum(1.0, 1.0 / np.maximum(u, 1e-12))))
         converge = np.max(np.abs(nouveau - beta)) < 1e-6
         beta = nouveau
         if converge:
@@ -165,13 +174,31 @@ def regression_robuste(x, y, penalites=None, iterations=50, k=1.345):
 
 
 def preparer_donnees(tours):
-    """Tours propres en pneus secs ; écarte les composés trop peu roulés."""
+    """
+    Tours propres en pneus secs. Écarte (avec la raison) :
+    - les composés trop peu roulés ;
+    - les composés « non reliés » : l'écart entre deux composés neufs ne se mesure que grâce
+      aux pilotes qui ont roulé les deux. Sans aucun pilote commun (en début de course,
+      personne n'a encore changé de pneus), il se confond avec le rythme propre des pilotes
+      et le calcul le répartirait au hasard. On garde le groupe de composés relié au plus roulé.
+    """
     donnees = tours[tours["propre"] & tours["compose"].isin(COMPOSES_SECS)].copy()
     comptes = donnees["compose"].value_counts()
-    ecartes = {c: int(n) for c, n in comptes.items() if n < TOURS_MIN_COMPOSE}
+    ecartes = {c: f"seulement {n} tours propres" for c, n in comptes.items() if n < TOURS_MIN_COMPOSE}
     donnees = donnees[~donnees["compose"].isin(ecartes)]
     if donnees["compose"].nunique() == 0:
         raise ValueError("Pas assez de tours propres en pneus secs pour estimer l'usure.")
+
+    composes_par_pilote = donnees.groupby("pilote")["compose"].agg(set)
+    relies = {donnees["compose"].value_counts().idxmax()}
+    while True:  # on étend le groupe tant qu'un pilote relie un nouveau composé
+        nouveaux = set().union(*[s for s in composes_par_pilote if s & relies]) - relies
+        if not nouveaux:
+            break
+        relies |= nouveaux
+    for c in set(donnees["compose"]) - relies:
+        ecartes[c] = "aucun pilote ne l'a roulé avec un autre composé"
+    donnees = donnees[donnees["compose"].isin(relies)]
     return donnees.reset_index(drop=True), ecartes
 
 
@@ -183,10 +210,12 @@ def ajuster_usure(tours, forme="lineaire", par_ecurie=True, nb_bootstrap=NB_BOOT
     composes = [c for c in COMPOSES_SECS if c in set(donnees["compose"])]
     reference = composes[-1]  # le plus dur utilisé
     colonnes = colonnes_modele(donnees, composes, reference, forme, par_ecurie)
-    penalites = np.array([RAPPEL_ECURIE if c.startswith("usure_ecurie:") else 0.0 for c in colonnes])
+    penalites = np.array([RAPPEL_ECURIE if c.startswith("usure_ecurie:")
+                          else RAPPEL_CARBURANT if c == "carburant" else 0.0 for c in colonnes])
+    cibles = np.array([CARBURANT_TYPIQUE if c == "carburant" else 0.0 for c in colonnes])
 
     x, y = matrice(donnees, colonnes), donnees["temps"].to_numpy(dtype=float)
-    coefficients = regression_robuste(x, y, penalites)
+    coefficients = regression_robuste(x, y, penalites, cibles)
 
     # Bootstrap « sauvage » par relais : on garde tous les tours et on recombine les résidus,
     # chaque relais recevant un signe tiré au hasard. Tous les pilotes et composés restent
@@ -200,7 +229,7 @@ def ajuster_usure(tours, forme="lineaire", par_ecurie=True, nb_bootstrap=NB_BOOT
     tirages = np.empty((nb_bootstrap, len(colonnes)))
     for b in range(nb_bootstrap):
         signes = rng.choice([-1.0, 1.0], size=relais.max() + 1)[relais]
-        tirages[b] = regression_robuste(x, ajuste + signes * residus, penalites)
+        tirages[b] = regression_robuste(x, ajuste + signes * residus, penalites, cibles)
 
     pilotes = sorted(donnees["pilote"].unique())
     return ModeleUsure(forme, reference, composes, pilotes, colonnes, coefficients, tirages,
@@ -328,8 +357,8 @@ def main():
     d = modele.donnees
     print(f"\nModèle d'usure ({args.forme}) : {len(d)} tours propres en pneus secs, "
           f"{d['pilote'].nunique()} pilotes")
-    for c, n in modele.ecartes.items():
-        print(f"  {c} écarté : seulement {n} tours propres")
+    for c, raison in modele.ecartes.items():
+        print(f"  {c} écarté : {raison}")
     carburant = modele.coefficient("carburant")
     print(f"Carburant + piste : {carburant:+.3f} s/tour {_intervalle(*modele.intervalle('carburant'))}")
 
