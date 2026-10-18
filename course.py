@@ -60,7 +60,8 @@ def construire_tours(laps, pilotes):
     debut_suivant = tours.groupby("numero")["debut"].shift(-1)
     tours["fin"] = (tours["debut"] + pd.to_timedelta(tours["temps"], unit="s")).fillna(debut_suivant)
     tours["debut"] = tours["debut"].fillna(tours["fin"] - pd.to_timedelta(tours["temps"], unit="s"))
-    return tours
+    # Tour jamais bouclé : tour de décélération après le drapeau à damier, ou abandon en piste
+    return tours.dropna(subset=["fin"]).reset_index(drop=True)
 
 
 def ajouter_pneus(tours, stints):
@@ -84,12 +85,17 @@ def ajouter_pneus(tours, stints):
 def ajouter_stands(tours, pits):
     """Tours d'entrée et de sortie des stands, temps passé dans la voie des stands.
 
-    Dans OpenF1, le `lap_number` d'un arrêt est le tour d'entrée aux stands.
+    Dans OpenF1, le `lap_number` d'un arrêt est le tour d'entrée aux stands. Certaines
+    courses n'ont aucun arrêt enregistré (Bahreïn 2023) alors que les tours de sortie sont
+    signalés : le tour qui précède un tour de sortie est donc aussi un tour d'entrée.
     """
     duree = {(p["driver_number"], p["lap_number"]): p.get("pit_duration") for p in pits}
+    sorties_api = set(zip(tours.loc[tours["sortie_api"], "numero"], tours.loc[tours["sortie_api"], "tour"],
+                          strict=True))
     cle = list(zip(tours["numero"], tours["tour"], strict=True))
     cle_precedent = list(zip(tours["numero"], tours["tour"] - 1, strict=True))
-    tours["entree_stand"] = [c in duree for c in cle]
+    cle_suivant = list(zip(tours["numero"], tours["tour"] + 1, strict=True))
+    tours["entree_stand"] = [c in duree or s in sorties_api for c, s in zip(cle, cle_suivant, strict=True)]
     tours["sortie_stand"] = tours["sortie_api"] | pd.Series([c in duree for c in cle_precedent])
     tours["duree_stand"] = pd.to_numeric(pd.Series([duree.get(c) for c in cle]), errors="coerce")
     return tours.drop(columns="sortie_api")

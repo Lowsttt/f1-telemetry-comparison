@@ -60,6 +60,15 @@ def test_fin_du_tour_sans_duree_prise_au_tour_suivant():
     assert aaa.loc[5, "fin"] == aaa.loc[6, "debut"]
 
 
+def test_tour_jamais_boucle_retire():
+    # Tour de décélération après l'arrivée : un début, mais ni durée ni tour suivant
+    laps = laps_fictifs() + [{"driver_number": 1, "lap_number": NB_TOURS + 1, "lap_duration": None,
+                              "date_start": iso(NB_TOURS * TEMPS_TOUR), "is_pit_out_lap": False}]
+    tours = course.construire_tours(laps, PILOTES)
+    assert tours["tour"].max() == NB_TOURS
+    assert tours["fin"].notna().all()
+
+
 def test_ajouter_pneus_age_et_chevauchement():
     stints = [
         {"driver_number": 1, "stint_number": 1, "lap_start": 1, "lap_end": 4, "compound": "MEDIUM",
@@ -80,6 +89,17 @@ def test_ajouter_stands():
     bbb = course.ajouter_stands(tours_de_base(), pits).query("pilote == 'BBB'").set_index("tour")
     assert bbb.loc[4, ["entree_stand", "sortie_stand", "duree_stand"]].tolist() == [True, False, 23.5]
     assert bbb.loc[5, ["entree_stand", "sortie_stand"]].tolist() == [False, True]
+    assert bbb["entree_stand"].sum() == 1
+
+
+def test_entree_aux_stands_deduite_du_tour_de_sortie():
+    # Aucun arrêt enregistré par l'API, mais le tour 6 de BBB est signalé comme sortie des stands
+    laps = laps_fictifs()
+    laps[NB_TOURS + 5]["is_pit_out_lap"] = True
+    bbb = course.ajouter_stands(course.construire_tours(laps, PILOTES), []).query("pilote == 'BBB'")
+    bbb = bbb.set_index("tour")
+    assert bbb.loc[5, "entree_stand"] and bbb.loc[6, "sortie_stand"]
+    assert np.isnan(bbb.loc[5, "duree_stand"])
     assert bbb["entree_stand"].sum() == 1
 
 

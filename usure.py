@@ -19,7 +19,7 @@ Pour une course, sur les tours propres en pneus secs :
 - En forme « quadratique », on ajoute un terme en âge² pour capter une chute en fin de vie.
 
 L'ajustement est une régression robuste (Huber) : les tours encore un peu perturbés
-pèsent moins. La marge d'erreur vient d'un rééchantillonnage des relais (bootstrap).
+pèsent moins. La marge d'erreur vient d'un bootstrap « sauvage » par relais.
 
 Utilisation :
     python usure.py 2024 Monza
@@ -71,6 +71,11 @@ class ModeleUsure:
         """Temps au tour prédit (colonnes pilote, equipe, tour, compose, age_pneu)."""
         coefficients = self.coefficients if coefficients is None else coefficients
         return matrice(tours, self.colonnes) @ coefficients
+
+    def ecart_type_residuel(self):
+        """Dispersion robuste des temps au tour autour du modèle (s) : l'aléa d'un tour."""
+        residus = self.donnees["temps"].to_numpy(dtype=float) - self.predire(self.donnees)
+        return float(1.4826 * np.median(np.abs(residus - np.median(residus))))
 
     def pente(self, compose, equipe=None, tirages=False):
         """Usure (s par tour d'âge) d'un composé, pour une écurie si elle est donnée."""
@@ -183,16 +188,19 @@ def ajuster_usure(tours, forme="lineaire", par_ecurie=True, nb_bootstrap=NB_BOOT
     x, y = matrice(donnees, colonnes), donnees["temps"].to_numpy(dtype=float)
     coefficients = regression_robuste(x, y, penalites)
 
-    # Bootstrap par relais, stratifié par composé : chaque tirage garde tous les composés
+    # Bootstrap « sauvage » par relais : on garde tous les tours et on recombine les résidus,
+    # chaque relais recevant un signe tiré au hasard. Tous les pilotes et composés restent
+    # présents dans chaque tirage (un rééchantillonnage des relais pouvait faire disparaître
+    # un pilote et rendre ses coefficients absurdes), et l'aléa commun aux tours d'un même
+    # relais (pneu un peu meilleur, trafic prolongé) est conservé.
     rng = np.random.default_rng(graine)
-    par_compose = {}
-    for indices in donnees.groupby(["pilote", "relais"]).indices.values():
-        par_compose.setdefault(donnees["compose"].iloc[indices[0]], []).append(indices)
+    relais = donnees.groupby(["pilote", "relais"]).ngroup().to_numpy()
+    ajuste = x @ coefficients
+    residus = y - ajuste
     tirages = np.empty((nb_bootstrap, len(colonnes)))
     for b in range(nb_bootstrap):
-        lignes = np.concatenate([groupe[i] for groupe in par_compose.values()
-                                 for i in rng.integers(0, len(groupe), len(groupe))])
-        tirages[b] = regression_robuste(x[lignes], y[lignes], penalites)
+        signes = rng.choice([-1.0, 1.0], size=relais.max() + 1)[relais]
+        tirages[b] = regression_robuste(x, ajuste + signes * residus, penalites)
 
     pilotes = sorted(donnees["pilote"].unique())
     return ModeleUsure(forme, reference, composes, pilotes, colonnes, coefficients, tirages,
